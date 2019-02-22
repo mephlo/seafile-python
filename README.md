@@ -1,2 +1,2 @@
 # seafile-python
-python class for using seafile api
+My own class for accessing the seafile api
