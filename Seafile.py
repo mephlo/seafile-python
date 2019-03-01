@@ -15,11 +15,8 @@ class Seafile():
         self.host = host
         self.baseurl = 'https://' +host
         self.apitoken = None
-        # check local token
+        # check local token or login
         self.sf_get_localtoken()
-
-        # get credentials / logon
-        #self.sf_logon()
     
     def sf_logon(self):
         if self.apitoken is None:
@@ -37,7 +34,7 @@ class Seafile():
             # do request
             _apitoken = json.loads(self.sf_do_request('post', _api_entry, _api_data, None))
 
-            # if 2 factor auth is enabled, push it, too
+            # 2 factor authentication
             if 'Two factor auth token is missing.' in str(_apitoken):
                 _otp_token = input('Please enter 2-factor OTP Code:')
 
@@ -47,45 +44,35 @@ class Seafile():
 
                 _apitoken = json.loads(self.sf_do_request('post', _api_entry, _api_data, _api_header))
 
-            #DEBUG
-            #print(_apitoken)
             try:
                 if '<!DOCTYPE html>' in str(_apitoken):
                     raise SystemError('Error in URL Encoding')
                 else:
                     self.apitoken = _apitoken['token']
-                    #DEBUG
-                    #print(_apitoken['token'])
-                    #ToDo: Code for exceptions (Wrong password and so on)
                     return self.apitoken
             except SystemError:
                 print('Error in URL Encoding')
                 quit()
             
-            
+    def sf_del_link(self, token):
+        
+        #create request
+        _api_entry = '/api/v2.1/share-links/' +token
+        _api_header = {
+            'Authorization': 'Token ' + self.apitoken,
+        }
+
+        success = self.sf_do_request('delete', _api_entry, None, _api_header)
+        return success
 
     def sf_do_request(self, method, api_entry, data, headers):
         _url = self.baseurl + api_entry
         try:
-            if method == 'get':
-                if headers == 'None':
-                    #DEBUG
-                    #print('GET without header')
-                    return requests.get(_url, data=data).text
-                else:
-                    #DEBUG
-                    #print('GET with headers')
-                    return requests.get(_url, data=data, headers=headers).text
+            if headers == 'None':        
+                return requests.request(method.lower(), _url, data=data).text
+            else:
+                return requests.request(method.lower(), _url, data=data, headers=headers).text
 
-            if method == 'post':
-                if headers == 'None':
-                    #DEBUG
-                    #print('Post without headers')
-                    return requests.post(_url, data=data).text
-                else:
-                    #DEBUG
-                    #print('POST with headers')
-                    return requests.post(_url, data=data, headers=headers).text
         except TimeoutError:
             print('Connection timed out')
             exit()
@@ -100,26 +87,19 @@ class Seafile():
         _json = json.loads(self.sf_do_request('get', _api_entry, None, _api_header))
         return _json
         
-        #for result in _json:
-        #    print('\n')
-        #    print('Link:',result['link'])
-        #    print('Dateipfad:', result['repo_name'] + result['path'])
-        #    print('\n')
 
     def sf_get_orphaned_links(self):
         
         _orphaned = {}
-        # get all links
-
+        # first get all links
         _links = self.sf_get_links()
         
         for _link in _links:
             if _link['is_expired']:
-                #print(_link['link'], 'is orphaned')
                 _link_id = _link['token']
                 _link_properties = (_link['repo_name'] +_link['path'], _link['expire_date'])
                 _orphaned[_link_id] = _link_properties
-            #_orphaned = 
+
         return _orphaned
 
     def sf_get_localtoken(self):
@@ -130,8 +110,7 @@ class Seafile():
             _tokendir = os.getenv('HOME') + '/.config'
         
         _tokendir = _tokendir + '/seafile-python'
-        #DEBUG
-        #print(_tokendir)
+
         try:
             _tokendir = Path(_tokendir)
             _tokendir.mkdir(exist_ok=True, parents=True)
@@ -150,3 +129,11 @@ class Seafile():
 
         except BaseException as err:
             print('Fehler:', err )
+
+    def sf_search(self, string):
+        _api_entry = '/api2/search/?q=' +string +'&search_repo=all'
+        _api_header = {
+            'Authorization': 'Token ' + self.apitoken
+        }
+
+        return self.sf_do_request('get', _api_entry, None, _api_header)
