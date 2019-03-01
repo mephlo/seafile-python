@@ -18,41 +18,42 @@ class Seafile():
         # check local token or login
         self.sf_get_localtoken()
     
-    def sf_logon(self):
-        if self.apitoken is None:
-            _username = input('Please enter your username: ')
-            _password = getpass('Please enter your password: ')
+    def sf_create_dlink(self, repo, path, password=None, expires=None):
+        #returns link only
+        _repo = repo
+        _path = path
+        _password = password
+        _expires = expires
 
-            # build request
-            _api_entry = '/api2/auth-token/'
+        _api_entry = '/api/v2.1/share-links/'
+        _api_header = {
+            'Authorization': 'Token ' + self.apitoken,
+            'Accept': 'application/json; indent=4'
+        }
 
-            _api_data = {
-                'username': _username,
-                'password': _password
-            }
+        # get repo id
+        _repoid = self.sf_get_repoid(_repo)
 
-            # do request
-            _apitoken = json.loads(self.sf_do_request('post', _api_entry, _api_data, None))
+        _api_data = {
+            'path' : _path,
+            'repo_id': _repoid
+        }
 
-            # 2 factor authentication
-            if 'Two factor auth token is missing.' in str(_apitoken):
-                _otp_token = input('Please enter 2-factor OTP Code:')
+        # password
+        if password:
+            #ToDo: password check
+            _api_data['password'] = _password
 
-                _api_header = {
-                    'X-SEAFILE-OTP': _otp_token
-                }
+        if expires:
+            _api_data['expire_days'] = expires
 
-                _apitoken = json.loads(self.sf_do_request('post', _api_entry, _api_data, _api_header))
+        print(_api_data)
+        # do sharing
+        _link = json.loads(self.sf_do_request('post', _api_entry, _api_data, _api_header))
+        return _link['link']
 
-            try:
-                if '<!DOCTYPE html>' in str(_apitoken):
-                    raise SystemError('Error in URL Encoding')
-                else:
-                    self.apitoken = _apitoken['token']
-                    return self.apitoken
-            except SystemError:
-                print('Error in URL Encoding')
-                quit()
+    def sf_create_ulink(self, _repo, path, **kargs):
+        pass
             
     def sf_del_link(self, token):
         
@@ -120,7 +121,6 @@ class Seafile():
             if os.path.isfile(str(_tokenfile)) :
                 with open(_tokenfile, 'r') as f:
                     self.apitoken = str(f.readline())
-                print('using cached token for logon')
             else:
                 # get token and write it to file
                 _apitoken = self.sf_logon()
@@ -130,10 +130,56 @@ class Seafile():
         except BaseException as err:
             print('Fehler:', err )
 
+    def sf_get_repoid(self, _repo):
+        _api_entry = '/api2/repos/?nameContains=' +_repo
+        _api_header = {
+            'Authorization': 'Token ' + self.apitoken
+        }
+        
+        _lib = json.loads(self.sf_do_request('get', _api_entry, None, _api_header))
+        _repo_id = (_lib[0]['id'])
+        return _repo_id
+
     def sf_search(self, string):
         _api_entry = '/api2/search/?q=' +string +'&search_repo=all'
         _api_header = {
             'Authorization': 'Token ' + self.apitoken
         }
-
+    
         return self.sf_do_request('get', _api_entry, None, _api_header)
+
+    def sf_logon(self):
+        if self.apitoken is None:
+            _username = input('Please enter your username: ')
+            _password = getpass('Please enter your password: ')
+
+            # build request
+            _api_entry = '/api2/auth-token/'
+
+            _api_data = {
+                'username': _username,
+                'password': _password
+            }
+
+            # do request
+            _apitoken = json.loads(self.sf_do_request('post', _api_entry, _api_data, None))
+
+            # 2 factor authentication
+            if 'Two factor auth token is missing.' in str(_apitoken):
+                _otp_token = input('Please enter 2-factor OTP Code:')
+
+                _api_header = {
+                    'X-SEAFILE-OTP': _otp_token
+                }
+
+                _apitoken = json.loads(self.sf_do_request('post', _api_entry, _api_data, _api_header))
+
+            try:
+                if '<!DOCTYPE html>' in str(_apitoken):
+                    raise SystemError('Error in URL Encoding')
+                else:
+                    self.apitoken = _apitoken['token']
+                    return self.apitoken
+            except SystemError:
+                print('Error in URL Encoding')
+                quit()
